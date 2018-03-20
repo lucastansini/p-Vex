@@ -1,0 +1,6 @@
+/rvex-release*
+/bitstreams/
+__pycache__
+config
+doc/
+lib/rvex

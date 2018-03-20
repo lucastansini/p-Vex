@@ -1,0 +1,664 @@
+#
+# This file specifies the memory map for accessing the core through the debug
+# interface. Each line consists of three parts: the context mask, the
+# definition name and the value. The mask and definition name are separated by
+# a colon, the value is enclosed by curly braces. Anything after a hash is
+# ignored.
+#
+# -----------------------------------------------------------------------------
+# Context mask
+# -----------------------------------------------------------------------------
+# rvd allows you to switch between multiple rvex contexts easily using the
+# select command. Only the definitions in this file which contain the selected
+# context in the mask will be evaluated. This allows you to specify different
+# definitions for different contexts.
+# 
+# The context mask must be one of the following:
+#  - "all": matches any context.
+#  - <from>..<to>: range, matching any context within from and to inclusive.
+#  - <context>: matches only the specified context.
+#
+# rvd supports up to 32 contexts, numbered from 0 to 31.
+#
+# -----------------------------------------------------------------------------
+# Definition name and value
+# -----------------------------------------------------------------------------
+# Definitions in rvd can be used anywhere in place of an integer literal. They
+# work kind of like #define in the C preprocessor, in that they are expanded
+# when they are used, so definition order in this file does not matter. When
+# used in expressions though, they behave as if there were parenthesis around
+# the expansion compared to the C preprocessor.
+#
+# The value for a definition should be a valid expression. To get more
+# information on how expressions work in rvd, run "rvd help expressions".
+#
+
+################################################################################
+#                             RVEX CONTEXT SETUP                               #
+################################################################################
+
+# Specifies the number of contexts. This defines what rvd will do when you run
+# a command for all contexts. Should be defined for all contexts, there's no
+# point in defining a different number for different contexts (obviously).
+all:_NUM_CONTEXTS           { 4 }
+
+# This is called after a context change to set banking bits. Currently there
+# are no banking bits, so this does nothing.
+all:SET_BANK                { 0 }
+
+
+################################################################################
+#                           RVEX CONTROL REGISTERS                             #
+################################################################################
+
+# Control register base address.
+all:CREG                    { 0xF0000000 }
+
+# Coarse memory map for the control registers, hardcoded in core_ctrlRegs.vhd.
+all:CREG_GLOB               { CREG + 0x000 }
+all:CREG_GPREG              { CREG + 0x100 + (_CUR_CONTEXT * 0x400) }
+all:CREG_CTXT               { CREG + 0x200 + (_CUR_CONTEXT * 0x400) }
+
+# All the actual registers are specified in the generated core.map memory map
+# file. The things below are aliases for backwards-compatibility because some
+# names have changed.
+
+# Aliases for the old register names.
+all:DCRF                    { DCR }
+all:C_CYC                   { CYC }
+all:C_CYCH                  { CYCH }
+all:C_STALL                 { STALL }
+all:C_STALLH                { STALLH }
+all:C_BUN                   { BUN }
+all:C_BUNH                  { BUNH }
+all:C_SYL                   { SYL }
+all:C_SYLH                  { SYLH }
+all:C_NOP                   { NOP }
+all:C_NOPH                  { NOPH }
+all:C_IACC                  { IACC }
+all:C_IACCH                 { IACCH }
+all:C_IMISS                 { IMISS }
+all:C_IMISSH                { IMISSH }
+all:C_DRACC                 { DRACC }
+all:C_DRACCH                { DRACCH }
+all:C_DRMISS                { DRMISS }
+all:C_DRMISSH               { DRMISSH }
+all:C_DWACC                 { DWACC }
+all:C_DWACCH                { DWACCH }
+all:C_DWMISS                { DWMISS }
+all:C_DWMISSH               { DWMISSH }
+all:C_DBYPASS               { DBYPASS }
+all:C_DBYPASSH              { DBYPASSH }
+all:C_DWBUF                 { DWBUF }
+all:C_DWBUFH                { DWBUFH }
+
+
+################################################################################
+#                              RVD INTERNAL DEFS                               #
+################################################################################
+
+# This is evaluated before any rvd command is called.
+all:_ALWAYS {
+  SET_BANK;
+}
+
+# This is evaluated when "rvd break" is called.
+all:_BREAK {
+  write(DCRF, 0x09hh);
+  PRINT_STATE;
+}
+
+# This is evaluated when "rvd step" is called.
+all:_STEP {
+  write(DCRF, 0x0Ahh);
+  PRINT_STATE;
+}
+  
+# This is evaluated when "rvd resume" is called.
+all:_RESUME {
+  write(DCRF, 0x0Chh);
+}
+
+# This is evaluated when "rvd release" is called.
+all:_RELEASE {
+  write(DCRF, 0x10hh);
+}
+  
+# This is evaluated when "rvd reset" is called.
+all:_RESET {
+  write(DCRF, 0x09hh); # break
+  set(reg, 0);
+  while (reg < 64, (
+    writeWord(CREG_GPREG + (reg*4), 0);
+    set(reg, reg + 1);
+  ));
+  write(DCRF, 0x80hh); # reset
+}
+  
+# This is evaluated when "rvd reset break" is called.
+all:_RESET_BREAK {
+  write(DCRF, 0x89hh);
+}
+
+# This is evaluated when "rvd gdb" waits for a breakpoint.
+all:_WAIT {
+  set(retval, 0x202);
+  set(d, readWord(DCR));
+  while (!(d & 0x01000000), (
+    delay_ms(250);
+    set(d, readWord(DCR));
+  ));
+  
+  if (d & 0x80000000, (
+    # STOP instruction.
+    set(retval, readByte(RET));
+  ), (
+    # Debug trap.
+    set(d, (d >> 16) & 0xFF);
+    if (d == 0xFA, (
+      # Software breakpoint.
+      set(retval, 0x200);
+    ));
+    if (d == 0xFB, (
+      # Single step.
+      set(retval, 0x201);
+    ));
+    if (d >= 0xFC, (
+      # Hardware breakpoint.
+      set(retval, 0x100 + (d - 0xFC));
+    ));
+  ));
+  retval
+}
+
+# This is evaluated when "rvd state" is called.
+all:_STATE {
+  printf("\n\033[1;4m                              DUMPING STATE FOR CONTEXT %d                             \033[0m\n", _CUR_CONTEXT);
+  SET_BANK;
+  FANCY_PRINT;
+}
+
+# This must be mapped to the trace unit control byte.
+all:_TRACE_CTRL { DCR2 + 3 }
+
+
+################################################################################
+#                              GDB BRIDGING DEFS                               #
+################################################################################
+
+# Convert a core/gdb address to a debug bus address.
+all:_GDB_ADDR_R { _GDB_ADDR }
+all:_GDB_ADDR_W { _GDB_ADDR }
+
+# Return the number of registers which gdb is aware of.
+all:_GDB_REG_NUM { 81 }
+
+# Read gdb registers.
+all:_GDB_REG_PRE { preload(CREG_GPREG, 0x120) }
+all:_GDB_REG_R {
+  prioritize (
+    _GDB_REG_INDEX < 64,  readWordPreload(CREG_GPREG + (_GDB_REG_INDEX*4)),
+    _GDB_REG_INDEX < 72,  (readBytePreload(BR) & (1hh << (_GDB_REG_INDEX - 64))) != 0,
+    _GDB_REG_INDEX == 72, readWordPreload(LR),
+    _GDB_REG_INDEX == 73, readWordPreload(PC),
+    _GDB_REG_INDEX == 74, readHalfPreload(CCRF),
+    _GDB_REG_INDEX == 75, readHalfPreload(SCCRF),
+    _GDB_REG_INDEX == 76, readBytePreload(TC),
+    _GDB_REG_INDEX == 77, readWordPreload(TP),
+    _GDB_REG_INDEX == 78, readWordPreload(TA),
+    _GDB_REG_INDEX == 79, readWordPreload(TH),
+    _GDB_REG_INDEX == 80, readWordPreload(PH)
+  )
+}
+
+# Write gdb registers.
+all:_GDB_REG_W {
+  prioritize (
+    _GDB_REG_INDEX < 64,  writeWord(CREG_GPREG + (_GDB_REG_INDEX*4), _GDB_REG_VALUE),
+    _GDB_REG_INDEX < 72,  (
+      set(brVal, readByte(BR));
+      set(brMask, 1 << (_GDB_REG_INDEX - 64));
+      set(brVal, (brVal & (~brMask)));
+      if (_GDB_REG_VALUE, (
+        set(brVal, brVal | brMask);
+      ));
+      writeByte(BR, brVal);
+    ),
+    _GDB_REG_INDEX == 72, writeWord(LR, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 73, writeWord(PC, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 74, writeHalf(CCRF, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 75, writeHalf(SCCRF, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 76, writeByte(TC, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 77, writeWord(TP, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 78, writeWord(TA, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 79, writeWord(TH, _GDB_REG_VALUE),
+    _GDB_REG_INDEX == 80, writeWord(PH, _GDB_REG_VALUE)
+  )
+}
+
+# Soft breakpoint instruction: trap r0.0, 0xFA. Copy the stop bit from the
+# syllable which is being replaced.
+all:_GDB_SOFTBRK {
+  0x908003E8w | (_GDB_SOFTBRK_SYL & 0x00000002w)
+}
+
+# Sets or deletes a breakpoint or watchpoint.
+all:_GDB_HARDBRK {
+  prioritize (
+    
+    # Fail if index >= 4.
+    _GDB_HARDBRK_INDEX >= 4, 0,
+    
+    # Read-only watchpoints are not supported.
+    _GDB_HARDBRK_TYPE == 3, 0,
+    
+    # Otherwise:
+    1, (
+      
+      # Write the breakpoint address register.
+      prioritize(
+        _GDB_HARDBRK_INDEX == 0, writeWord(BRK0, _GDB_HARDBRK_ADDR),
+        _GDB_HARDBRK_INDEX == 1, writeWord(BRK1, _GDB_HARDBRK_ADDR),
+        _GDB_HARDBRK_INDEX == 2, writeWord(BRK2, _GDB_HARDBRK_ADDR),
+        _GDB_HARDBRK_INDEX == 3, writeWord(BRK3, _GDB_HARDBRK_ADDR)
+      );
+      
+      # Read the current breakpoint configuration register.
+      set(cfg, readHalf(DCRB));
+      
+      # Clear the configuration nibble for the selected breakpoint.
+      set(cfg, cfg & (~(0xF << (4 * _GDB_HARDBRK_INDEX))));
+      
+      # Load the new configuration for the selected breakpoint. The gdb
+      # convention for this happens to match ours, except for that type 4 is
+      # type 3 for us and that gdb type 3 is not supported.
+      set(cfg, cfg | (if(_GDB_HARDBRK_TYPE==4,3,_GDB_HARDBRK_TYPE) << (4 * _GDB_HARDBRK_INDEX)));
+      
+      # Write the new configuration.
+      writeHalf(DCRB, cfg);
+      
+      # Return success.
+      1
+    )
+  )
+}
+
+
+################################################################################
+#                           STUFF USED IN MAKEFILES                            #
+################################################################################
+
+all:PRINT_STATE { _STATE }
+
+# Waits for completion of a program and then prints statistics. Should only be
+# called using a single context.
+all:WAIT_COMPLETE {
+  
+  printf("Waiting for program to terminate");
+  
+  # In case _NUM_CONTEXTS expands to something complicated, we'll want to
+  # preload it here.
+  set(count, _NUM_CONTEXTS);
+  
+  # Initialize prev_cycle things.
+  set(prev_cyc0, 0);
+  set(prev_cyc1, 0);
+  set(prev_cyc2, 0);
+  set(prev_cyc3, 0);
+  set(prev_cyc4, 0);
+  set(prev_cyc5, 0);
+  set(prev_cyc6, 0);
+  set(prev_cyc7, 0);
+  
+  # Wait for completion.
+  set(diffs, 1);
+  while (diffs, (
+    
+    # Load the current cycle counter values.
+    if (count > 0, (set(_CUR_CONTEXT, 0); SET_BANK; set(cyc0, readWord(C_CYC))), set(cyc0, 0));
+    if (count > 1, (set(_CUR_CONTEXT, 1); SET_BANK; set(cyc1, readWord(C_CYC))), set(cyc1, 0));
+    if (count > 2, (set(_CUR_CONTEXT, 2); SET_BANK; set(cyc2, readWord(C_CYC))), set(cyc2, 0));
+    if (count > 3, (set(_CUR_CONTEXT, 3); SET_BANK; set(cyc3, readWord(C_CYC))), set(cyc3, 0));
+    if (count > 4, (set(_CUR_CONTEXT, 4); SET_BANK; set(cyc4, readWord(C_CYC))), set(cyc4, 0));
+    if (count > 5, (set(_CUR_CONTEXT, 5); SET_BANK; set(cyc5, readWord(C_CYC))), set(cyc5, 0));
+    if (count > 6, (set(_CUR_CONTEXT, 6); SET_BANK; set(cyc6, readWord(C_CYC))), set(cyc6, 0));
+    if (count > 7, (set(_CUR_CONTEXT, 7); SET_BANK; set(cyc7, readWord(C_CYC))), set(cyc7, 0));
+    
+    # See if the cycle counter values changed since the last time we read them.
+    set(diffs, 
+      (cyc0 != prev_cyc0) ||
+      (cyc1 != prev_cyc1) ||
+      (cyc2 != prev_cyc2) ||
+      (cyc3 != prev_cyc3) ||
+      (cyc4 != prev_cyc4) ||
+      (cyc5 != prev_cyc5) ||
+      (cyc6 != prev_cyc6) ||
+      (cyc7 != prev_cyc7)
+    );
+    
+    # Store the previous values.
+    set(prev_cyc0, cyc0);
+    set(prev_cyc1, cyc1);
+    set(prev_cyc2, cyc2);
+    set(prev_cyc3, cyc3);
+    set(prev_cyc4, cyc4);
+    set(prev_cyc5, cyc5);
+    set(prev_cyc6, cyc6);
+    set(prev_cyc7, cyc7);
+    
+    # Delay for 500 milliseconds between checks.
+    delay_ms(500);
+    
+    printf(".");
+    
+  ));
+  
+  printf(" done.\n\n");
+  
+  # Do a performance counter dump for each context.
+  FANCY_PERFORMANCE;
+  
+}
+
+
+################################################################################
+#                             FANCY STATE PRINTING                             #
+################################################################################
+
+all:GET_PERFORMANCE_COUNTER {
+  set(lo, readWordPreload(reg));
+  if (counter_width > 4, (
+    set(hi, readWordPreload(reg+4));
+    if ((lo >> 24) != (hi & 0xFF), (
+      set(lo, hi << 24);
+    ));
+    set(hi, hi >> 8);
+  ), (
+    set(hi, 0);
+  ));
+}
+
+all:PRINT_PERFORMANCE_COUNTER {
+  GET_PERFORMANCE_COUNTER;
+  printf("0x%06X%08X = ", hi, lo);
+  prioritize(
+    (hi & 0xFFFC0000),         printf("\033[1;32m%7u............ Tebi\033[0m", hi >> 8),
+    (hi & 0xFFFFFF00),         printf("   \033[1;32m%7u......... Gibi\033[0m", (lo >> 30) | (hi <<  2)),
+    (hi || (lo & 0xC0000000)), printf("      \033[1;32m%7u...... Mebi\033[0m", (lo >> 20) | (hi << 12)),
+    (hi || (lo & 0xFFF00000)), printf("         \033[1;32m%7u... kibi\033[0m", (lo >> 10) | (hi << 22)),
+    1,                         printf("            \033[1;32m%7u \033[0m",     lo)
+  );
+}
+
+all:FANCY_PERFORMANCE {
+  set(val, readWordPreload(EXT0));
+  set(counter_width, FIELD_EXT0_P);
+  set(count, _NUM_CONTEXTS);
+  set(cur, 0);
+  while (cur < count, (
+    
+    set(_CUR_CONTEXT, cur);
+    SET_BANK;
+    printf("\033[1mPerformance counters for context %d:\033[0m\n", cur);
+    printf("             Active cycles = "); set(reg, CYC);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mcycles\033[0m\n");
+    printf("            Stalled cycles = "); set(reg, STALL);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mcycles\033[0m\n");
+    printf("    Committed bundle count = "); set(reg, BUN);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mbundles\033[0m\n");
+    printf("  Committed syllable count = "); set(reg, SYL);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32msyllables\033[0m\n");
+    printf("       Committed NOP count = "); set(reg, NOP);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32msyllables\033[0m\n");
+    printf("\n");
+    
+    set(cur, cur + 1);
+  ));
+  set(val, readWordPreload(EXT0));
+  if ((FIELD_EXT0_C), (
+    set(cur, 0);
+    while (cur < count, (
+      
+      set(_CUR_CONTEXT, cur);
+      SET_BANK;
+      printf("\033[1mPerformance counters for cache block %d:\033[0m\n", cur);
+      printf("Instruction cache accesses = "); set(reg, IACC);    PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("  Instruction cache misses = "); set(reg, IMISS);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("  Data cache read accesses = "); set(reg, DRACC);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("    Data cache read misses = "); set(reg, DRMISS);  PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf(" Data cache write accesses = "); set(reg, DWACC);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("   Data cache write misses = "); set(reg, DWMISS);  PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("Data cache bypass accesses = "); set(reg, DBYPASS); PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("   Data waits on write buf = "); set(reg, DWBUF);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32maccesses\033[0m\n");
+      printf("\n");
+      
+      set(cur, cur + 1);
+    ));
+  ));
+}
+
+all:PRINT_CHAR {
+  prioritize(
+    
+    # Decimal digits.
+    char ==  48, printf("0"), char ==  49, printf("1"), char ==  50, printf("2"), char ==  51, printf("3"),
+    char ==  52, printf("4"), char ==  53, printf("5"), char ==  54, printf("6"), char ==  55, printf("7"),
+    char ==  56, printf("8"), char ==  57, printf("9"),
+    
+    # Uppercase letters.
+    char ==  65, printf("A"), char ==  66, printf("B"), char ==  67, printf("C"), char ==  68, printf("D"),
+    char ==  69, printf("E"), char ==  70, printf("F"), char ==  71, printf("G"), char ==  72, printf("H"),
+    char ==  73, printf("I"), char ==  74, printf("J"), char ==  75, printf("K"), char ==  76, printf("L"),
+    char ==  77, printf("M"), char ==  78, printf("N"), char ==  79, printf("O"), char ==  80, printf("P"),
+    char ==  81, printf("Q"), char ==  82, printf("R"), char ==  83, printf("S"), char ==  84, printf("T"),
+    char ==  85, printf("U"), char ==  86, printf("V"), char ==  87, printf("W"), char ==  88, printf("X"),
+    char ==  89, printf("Y"), char ==  90, printf("Z"),
+    
+    # Lowercase letters.
+    char ==  97, printf("a"), char ==  98, printf("b"), char ==  99, printf("c"), char == 100, printf("d"),
+    char == 101, printf("e"), char == 102, printf("f"), char == 103, printf("g"), char == 104, printf("h"),
+    char == 105, printf("i"), char == 106, printf("j"), char == 107, printf("k"), char == 108, printf("l"),
+    char == 109, printf("m"), char == 110, printf("n"), char == 111, printf("o"), char == 112, printf("p"),
+    char == 113, printf("q"), char == 114, printf("r"), char == 115, printf("s"), char == 116, printf("t"),
+    char == 117, printf("u"), char == 118, printf("v"), char == 119, printf("w"), char == 120, printf("x"),
+    char == 121, printf("y"), char == 122, printf("z"),
+    
+    # Misc.
+    char ==  45, printf("-"), char ==  95, printf("_"), 1, printf("?")
+    
+  );
+}
+
+all:FANCY_PRINT {
+  
+  printf("\n");
+  
+  # Load GPREG and CXREG sections.
+  preload(CREG_GLOB, 256);
+  
+  printf("\033[1mConfiguration:\033[0m\n");
+  
+  printf("  Version: core-\033[4m");
+  set(reg, CTAG);
+  while (reg < CTAG+7, (
+    set(char, readBytePreload(reg));
+    PRINT_CHAR;
+    set(reg, reg+1);
+  ));
+  printf("\033[0m, platform-\033[4m");
+  set(reg, PTAG);
+  while (reg < PTAG+7, (
+    set(char, readBytePreload(reg));
+    PRINT_CHAR;
+    set(reg, reg+1);
+  ));
+  set(val, readWordPreload(EXT0));
+  printf("\033[0m, branch offset in units of %d bits\n", (64-(32*FIELD_EXT0_O)));
+  
+  set(val, readWordPreload(DCFG));
+  printf("  Generic config: %d lanes, %d group(s), %d context(s), %d-bit bundle alignment\n",
+    FIELD_DCFG_NL+1, FIELD_DCFG_NG+1, FIELD_DCFG_NC+1, (FIELD_DCFG_BA+1)*32);
+  
+  printf("  Runtime config: 0x%08X, requested by ", readWordPreload(CC));
+  set(val, readWordPreload(GSR));
+  set(val, FIELD_GSR_RID);
+  prioritize(
+    (val < 8), printf("context %d\n", val),
+    (val == 8), printf("the wakeup system\n"),
+    (val == 15), printf("the debug bus or a reset\n"),
+    1, printf("unknown origin %d\n", val)
+  );
+  printf("\n");
+  
+  # Load GPREG and CXREG sections.
+  preload(CREG_GPREG, 256 + 512);
+  
+  printf("\033[1mState:\033[0m\n  ");
+  
+  set(me,  readBytePreload(CID));
+  set(cfg, readWordPreload(CC));
+  set(val, readWordPreload(DCFG));
+  set(nlg, FIELD_DCFG_NG+1);
+  set(lpg, (FIELD_DCFG_NL+1) / nlg);
+  set(lg, 0);
+  set(lanes, 0);
+  while (lg < nlg, (
+    if (((cfg >> (lg*4)) & 0xF) == me, (
+      set(lanes, lanes + lpg);
+    ));
+    set(lg, lg+1);
+  ));
+  if ((lanes == 0), (
+    printf("\033[1;4;31mNO LANES ALLOCATED\033[0m.");
+  ), (
+    printf("\033[1;32m%d lanes\033[0m allocated, ", lanes);
+    set(val, readWordPreload(DCR));
+    prioritize (
+      (FIELD_DCR_D), (printf("\033[1;4;32mDONE\033[0m, return value = \033[1;32m0x%02X\033[0m.", readBytePreload(RET))),
+      (FIELD_DCR_J), (printf("\033[1;4;31mjumping...\033[0m.")),
+      (FIELD_DCR_S), (printf("\033[1;4;31msingle-stepping...\033[0m.")),
+      (FIELD_DCR_B), (printf("\033[1;4;31mpaused\033[0m.")),
+      (1),           (printf("\033[1;4;32mrunning\033[0m."))
+    );
+  ));
+  printf("\n  ");
+  
+  set(tc, readBytePreload(TC));
+  if ((tc == 0), (
+    printf("Not handling any trap.\n  ");
+  ), (
+    printf("Currently handling \033[1;31mtrap %d\033[0m, argument \033[1;31m0x%08X\033[0m.\n  ", tc, readWordPreload(TA));
+  ));
+  
+  set(val, readWordPreload(CCR));
+  if ((FIELD_CCR_K == 1), (
+    printf("\033[1;32mKernel mode\033[0m, ");
+  ), (
+    printf("\033[1;32mUser mode\033[0m, ");
+  ));
+  if ((FIELD_CCR_R == 1), (
+    printf("\033[1;32mready\033[0m for trap, ");
+  ), (
+    printf("\033[1;31mnot ready\033[0m for trap, ");
+  ));
+  if ((FIELD_CCR_I == 1), (
+    printf("interrupts \033[1;32menabled\033[0m, ");
+  ), (
+    printf("interrupts \033[1;31mdisabled\033[0m, ");
+  ));
+  if ((FIELD_CCR_C == 1), (
+    printf("cxswitch \033[1;32menabled\033[0m.\n\n");
+  ), (
+    printf("cxswitch \033[1;31mdisabled\033[0m.\n\n");
+  ));
+  
+  printf("\033[1mInstruction pointers:\033[0m\n  ");
+  
+  printf("PC     = \033[1;4;32m0x%08X\033[0m\n\n  ", readWordPreload(PC));
+  printf("$l0.0  = \033[1;32m0x%08X\033[0m  ", readWordPreload(LR));
+  printf("TrapPt = \033[1;32m0x%08X\033[0m  ", readWordPreload(TP));
+  printf("TrapHan= \033[1;32m0x%08X\033[0m  ", readWordPreload(TH));
+  printf("PaniHan= \033[1;32m0x%08X\033[0m\n  ", readWordPreload(PH));
+  
+  set(reg, 0);
+  set(val, readWordPreload(DCR));
+  while (reg < 4, (
+    printf("BR%d    = ", reg);
+    if ((((val >> (reg*4)) & 0xF) == 1), (
+      printf("\033[1;32m0x%08X\033[0m  ", readWordPreload(BR0 + (reg*4)));
+    ), (
+      printf("disabled    ");
+    ));
+    set(reg, reg + 1);
+  ));
+  printf("\n\n");
+  
+  printf("\033[1mWatchpoints:\033[0m\n  ");
+  set(reg, 0);
+  set(val, readWordPreload(DCR));
+  while (reg < 4, (
+    printf("BR%d    = ", reg);
+    if ((((val >> (reg*4)) & 0xF) > 1), (
+      printf("\033[1;32m0x%08X\033[0m  ", readWordPreload(BR0 + (reg*4)));
+    ), (
+      printf("disabled    ");
+    ));
+    set(reg, reg + 1);
+  ));
+  printf("\n\n");
+  
+  printf("\033[1mGeneral purpose:\033[0m\n  ");
+  set(reg, 0);
+  while (reg < 64, (
+    set(val, readWordPreload(CREG_GPREG + (reg*4)));
+    printf("$r0.%.2d = ", reg);
+    if (val, (
+      printf("\033[1;32m");
+    ));
+    printf("0x%08X  \033[0m", val);
+    set(reg, reg + 1);
+    if (!(reg & 3), (
+      printf("\n  ");
+    ));
+  ));
+  printf("\n\033[1mBranch:\033[0m\n  ");
+  set(val, readBytePreload(BR));
+  set(reg, 0);
+  while (reg < 8, (
+    if (val & (1 << reg), (
+      printf("$b0.%d  = \033[1;32mtrue        \033[0m", reg);
+    ), (
+      printf("$b0.%d  = false       \033[0m", reg);
+    ));
+    
+    set(reg, reg + 1);
+    if (!(reg & 3), (
+      printf("\n  ");
+    ));
+  ));
+  printf("\n\033[1mScratchpad:\033[0m\n  ");
+  set(val, readWordPreload(SCRP1));
+  if (val, (
+    printf("\033[1;32m");
+  ));
+  printf("SCRP1  = 0x%08X  \033[0m", val);
+  set(val, readWordPreload(SCRP2));
+  if (val, (
+    printf("\033[1;32m");
+  ));
+  printf("SCRP2  = 0x%08X  \033[0m", val);
+  set(val, readWordPreload(SCRP3));
+  if (val, (
+    printf("\033[1;32m");
+  ));
+  printf("SCRP3  = 0x%08X  \033[0m", val);
+  set(val, readWordPreload(SCRP4));
+  if (val, (
+    printf("\033[1;32m");
+  ));
+  printf("SCRP4  = 0x%08X  \033[0m\n", val);
+  
+  set(val, readWordPreload(EXT0));
+  set(counter_width, FIELD_EXT0_P);
+  printf("\n\033[1mPerformance counters:\033[0m (size = %d bytes)\n", counter_width);
+  printf("  Active cycles            = "); set(reg, CYC);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mcycles\033[0m\n");
+  printf("  Stalled cycles           = "); set(reg, STALL);   PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mcycles\033[0m\n");
+  printf("  Committed bundle count   = "); set(reg, BUN);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32mbundles\033[0m\n");
+  printf("  Committed syllable count = "); set(reg, SYL);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32msyllables\033[0m\n");
+  printf("  Committed NOP count      = "); set(reg, NOP);     PRINT_PERFORMANCE_COUNTER; printf("\033[1;32msyllables\033[0m\n\n");
+}
