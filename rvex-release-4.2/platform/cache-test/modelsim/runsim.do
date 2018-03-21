@@ -19,3 +19,4 @@ do wave.do
 
 #Start the simulation. Note that executing 'run -all' will execute the simulation infite times. Instead you can use 'run Xus'
 run 100us
+
