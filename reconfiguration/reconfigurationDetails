@@ -1,0 +1,6 @@
+The reconfiguration is described with a single register of 32bits.
+ Nibbles (groups of 4 bits) represent the valid configurations.
+
+Requesting a reconfiguration: writing to the CR_CRR context control register on the core or globally (triggered outside the core), or using the sleep and wake-up system. TEN CYCLES are needed to make a reconfiguration.
+
+The reconfiguration details in the code can be found in the 'rvex.h', within the test-progs and 'src' folders.
