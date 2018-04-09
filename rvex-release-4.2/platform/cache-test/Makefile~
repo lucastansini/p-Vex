@@ -40,3 +40,11 @@ clean:
 conformance:
 	cd test-progs && $(MAKE) $@
 
+#Changes are made below this line
+vsimrun-%: compile-%
+	cd modelsim && $(MAKE) vsimrun
+
+vsimwave-%: compile-%
+	cd modelsim && $(MAKE) vsimwave
+
+

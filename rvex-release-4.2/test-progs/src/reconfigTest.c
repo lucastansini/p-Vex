@@ -1,19 +1,26 @@
-#include "reconfigFunctionExample.h"
+#include "rvex.h"
+
+
+int main() {
 
 
 
-
-int newConfig = 0x8888;
-
-
-
-int main(void) {
-
-	if(reconfigure(newConfig)){
-		rvex_succeed("Reconfiguration made with success.");	
-	}
+	int i=0;
+	puts("FOR TEST STARTED\n");
+	
 
 
+//	for(i ; i<100; i++);
 
+
+	/*Split the core in two*/
+	CR_CRR = 0x0011;
+
+	for(i; i<5; i++);
+//	for(i ; i<100; i++);
+	puts("FOR TEST PASSED\n");
 }
+
+
+
 
