@@ -1,14 +1,15 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
 add wave -noupdate /testbench/rvex_inst/rv2sim
-add wave -noupdate /testbench/rvex_inst/cfg2any_configWord
-add wave -noupdate /testbench/rv2rctrl_done
-add wave -noupdate /testbench/idleContexts
+add wave -noupdate /testbench/rvex_inst/CFG
+add wave -noupdate /testbench/rvex_inst/clkEn
 add wave -noupdate /testbench/rvex_inst/rv2rctrl_idle
+add wave -noupdate /testbench/rvex_inst/rv2rctrl_done
+add wave -noupdate /testbench/RCFG.numContextsLog2
 TreeUpdate [SetDefaultTree]
-WaveRestoreCursors {{Cursor 1} {58215834 ps} 0}
-quietly wave cursor active 1
-configure wave -namecolwidth 326
+WaveRestoreCursors {{Cursor 1} {0 ps} 0}
+quietly wave cursor active 0
+configure wave -namecolwidth 355
 configure wave -valuecolwidth 100
 configure wave -justifyvalue left
 configure wave -signalnamewidth 0
@@ -20,6 +21,6 @@ configure wave -gridoffset 0
 configure wave -gridperiod 1
 configure wave -griddelta 40
 configure wave -timeline 0
-configure wave -timelineunits ns
+configure wave -timelineunits ps
 update
-WaveRestoreZoom {58194197 ps} {58309141 ps}
+WaveRestoreZoom {0 ps} {796 ps}

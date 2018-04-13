@@ -13,8 +13,7 @@ compile-work.do:
 vsimrun: compile.do
 	$(VSIM) $(VSIMFLAGS) < runsim.do
 
-.PHONY: vsimwave
-vsimwave: compile.do
-	$(VSIM) < wavesim.do
-
+.PHONY: vsimruncyclecount
+vsimruncyclecount: compilecycle.do
+		$(VSIM) $(VSIMFLAGS) < runsim.do
 

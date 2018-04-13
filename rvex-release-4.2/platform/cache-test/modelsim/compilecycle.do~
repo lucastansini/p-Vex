@@ -1,0 +1,7 @@
+do compile-unisim.do
+do compile-common.do
+do compile-utils.do
+do compile-bus.do
+do compile-core.do
+do compile-cache.do
+do compile-workcycle.do

@@ -41,7 +41,13 @@ conformance:
 	cd test-progs && $(MAKE) $@
 
 #Changes are made below this line
+#'vsimrun' is for executing the simulation without the modelsim window opening.
 vsimrun-%: compile-%
 	cd modelsim && $(MAKE) vsimrun
+#'vsimrun-cyclecount' is for executing the simulation without the modelsim window opening and with cycle counting.
+vsimruncyclecount-%: compile-%
+	cd modelsim && $(MAKE) vsimruncyclecount
+
+
 
 

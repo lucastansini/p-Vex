@@ -1,26 +1,26 @@
 #include "rvex.h"
-
+#include <stdio.h>
 
 int main() {
 
 
+	CR_CRR = 0x3210;
+		
+	/*CR_CRR = 0x0211 enables three cores.
+	  CR_CRR = 0x0011 enables two cores.
+	  CR_CRR = 0x3210 enables all four cores with 2 lanes each.
+		
+	*/	
+
 
 	int i=0;
-	puts("FOR TEST STARTED\n");
+	int j=0;
 	
+	for(i; i<10000; i++){
+	  j++;
+	}
 
-
-//	for(i ; i<100; i++);
-
-
-	/*Split the core in two*/
-	CR_CRR = 0x0011;
-
-	for(i; i<5; i++);
-//	for(i ; i<100; i++);
-	puts("FOR TEST PASSED\n");
+	rvex_succeed("End of test.");
+	
 }
-
-
-
 

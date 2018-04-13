@@ -1,0 +1,21 @@
+# Compile the VHDL files.
+do compilecycle.do
+
+# Give simulate command.
+vsim -t ps -novopt -L unisim work.testbench
+
+onerror {resume}
+
+#Change radix to Hexadecimal#
+radix hex
+
+# Supress spam.
+set NumericStdNoWarnings 1
+set StdArithNoWarnings 1
+
+#Execute the runcycle.do file
+do wave.do
+
+#Execute the simulation
+run -all
+

@@ -13,5 +13,7 @@ compile-work.do:
 vsimrun: compile.do
 	$(VSIM) $(VSIMFLAGS) < runsim.do
 
-
+.PHONY: vsimruncyclecount
+vsimruncyclecount: compilecycle.do
+		$(VSIM) $(VSIMFLAGS) < runsimcycle.do
 

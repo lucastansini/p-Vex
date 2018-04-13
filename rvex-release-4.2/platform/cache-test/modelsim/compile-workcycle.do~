@@ -1,0 +1,2 @@
+vlib work
+vcom -quiet -93 -work work "../design/testbenchwithcycle.vhd"

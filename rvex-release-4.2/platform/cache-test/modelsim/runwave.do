@@ -1,3 +1,3 @@
-add wave sim:/testbench/rvex_inst/rv2sim
+do wave.do
 run 100us
 

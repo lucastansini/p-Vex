@@ -38,6 +38,15 @@ architecture Behavioral of testbench is
   signal clkEnCPU               : std_logic;
   signal clkEnBus               : std_logic;
   
+  -- Signals for cycle counting
+  signal rv2rctrl_idle		: std_logic_vector(2**RCFG.numContextsLog2-1 downto 0);
+  signal rv2rctrl_done		: std_logic_vector(2**RCFG.numContextsLog2-1 downto 0);
+  signal idleAllContexts        : std_logic_vector(2**RCFG.numContextsLog2-1 downto 0) := (others => '1'); --Sets all bits to 1.
+  type   rvex_context_array       is array (natural range <>) of natural;
+  signal cycle_counter          : rvex_context_array(2**RCFG.numContextsLog2-1 downto 0);
+  signal total_cycles		: rvex_context_array(0 downto 0);
+  -- End of signals for cycle counting
+  
   -- Debug interface signals.
   signal dbg2rv_addr            : rvex_address_type;
   signal dbg2rv_readEnable      : std_logic;
@@ -123,7 +132,10 @@ begin -- architecture
       reset                     => reset,
       clk                       => clk,
       clkEn                     => clkEnCPU,
-      
+      -- Cycle counting control
+      rv2rctrl_idle             => rv2rctrl_idle,
+      rv2rctrl_done             => rv2rctrl_done,
+
       -- Common memory interface.
       rv2mem_decouple           => rv2cache_decouple,
       mem2rv_blockReconfig      => cache2rv_blockReconfig,
@@ -431,7 +443,45 @@ begin -- architecture
     end loop;
     
   end process;
-  
-end Behavioral;
 
+      -- Counts running cycles
+  cycle_counter_process : process(clk)
+  begin
+    if rising_edge(clk) then
+      if reset = '1' then
+       cycle_counter <= (others => 0);
+       total_cycles <= (others => 0);
+    elsif clkEnCPU = '1' then
+       for i in 0 to 2**RCFG.numContextsLog2-1 loop
+        if (rv2rctrl_done(i) = '0' and rv2rctrl_idle(i) = '0') then -- Counts the cycles for each context
+          cycle_counter(i) <= cycle_counter(i) + 1;
+        end if;
+       end loop;
+    end if;
+   end if;
+  --Adds all cycles for each context after done executing
+  	if (rv2rctrl_idle = idleAllContexts and rv2rctrl_done /= "0000" ) then	
+  	  total_cycles(0) <= total_cycles(0) + cycle_counter(0) + cycle_counter(1) + cycle_counter(2) + cycle_counter(3);	
+  	end if;
+  end process cycle_counter_process;
+
+  -- print total cycles for code execution
+  print_cycles : process(clk)
+   variable l : line;
+  begin
+   if (rising_edge(clk)) and reset = '0' then
+    if (rv2rctrl_idle = idleAllContexts and rv2rctrl_done /= "0000" ) then
+       write(l, string'("Number of cycles per context  | "));
+      for i in 0 to 2**RCFG.numContextsLog2-1 loop
+       write(l, integer'image(cycle_counter(i)));
+       write(l, string'(" | "));
+      end loop;
+       write(l, string'("Total cycles executed in all contexts: "));
+       write(l, integer'image(total_cycles(0)));
+     report l.all severity FAILURE; --Failure is to stop the execution.
+    end if;
+   end if;
+ end process print_cycles;
+
+end Behavioral;
 
