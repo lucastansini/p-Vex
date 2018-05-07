@@ -1,7 +1,6 @@
 onerror {resume}
 quietly WaveActivateNextPane {} 0
 add wave -noupdate /testbench/rvex_inst/rv2sim
-add wave -noupdate /testbench/rvex_inst/rv2sim
 add wave -noupdate /testbench/rvex_inst/CFG
 add wave -noupdate /testbench/rvex_inst/clkEn
 add wave -noupdate /testbench/rvex_inst/rv2rctrl_idle

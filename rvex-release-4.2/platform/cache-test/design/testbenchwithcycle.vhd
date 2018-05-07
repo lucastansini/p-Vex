@@ -18,7 +18,7 @@ entity testbench is
 end testbench;
 
 architecture Behavioral of testbench is
-  
+
   -- Core and cache configuration.
   constant RCFG                 : rvex_generic_config_type := rvex_cfg(
     numLanesLog2                => 3,
@@ -31,13 +31,13 @@ architecture Behavioral of testbench is
     dataCacheLinesLog2          => 8
   );
   constant SREC_FILENAME        : string := "../test-progs/sim.srec";
-  
+
   -- System control signals in the rvex library format.
   signal reset                  : std_logic;
   signal clk                    : std_logic;
   signal clkEnCPU               : std_logic;
   signal clkEnBus               : std_logic;
-  
+
   -- Signals for cycle counting
   signal rv2rctrl_idle		: std_logic_vector(2**RCFG.numContextsLog2-1 downto 0);
   signal rv2rctrl_done		: std_logic_vector(2**RCFG.numContextsLog2-1 downto 0);
@@ -46,7 +46,19 @@ architecture Behavioral of testbench is
   signal cycle_counter          : rvex_context_array(2**RCFG.numContextsLog2-1 downto 0);
   signal total_cycles		: rvex_context_array(0 downto 0);
   -- End of signals for cycle counting
-  
+
+
+  -- Signals for Cache Miss
+  signal  instr_miss        : std_logic;
+  signal  data_miss         : std_logic;
+  --Type for counting the misses
+  type rvex_cache_counter_array   is array (natural range <>) of natural;
+  --Holds the amount of misses in data
+  signal  cache_counter_data : rvex_cache_counter_array(2**RCFG.numContextsLog2-1 downto 0);
+  --Holds the amount of misses in instructions
+  signal  cache_counter_instr : rvex_cache_counter_array(2**RCFG.numContextsLog2-1 downto 0);
+  --End of the list of signals for Cache Miss
+
   -- Debug interface signals.
   signal dbg2rv_addr            : rvex_address_type;
   signal dbg2rv_readEnable      : std_logic;
@@ -54,14 +66,14 @@ architecture Behavioral of testbench is
   signal dbg2rv_writeMask       : rvex_mask_type;
   signal dbg2rv_writeData       : rvex_data_type;
   signal rv2dbg_readData        : rvex_data_type;
-  
+
   -- Common cache interface signals.
   signal rv2cache_decouple      : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal cache2rv_blockReconfig : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal cache2rv_stallIn       : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal rv2cache_stallOut      : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal cache2rv_status        : rvex_cacheStatus_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
-  
+
   -- Instruction cache interface signals.
   signal rv2icache_PCs          : rvex_address_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal rv2icache_fetch        : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
@@ -69,7 +81,7 @@ architecture Behavioral of testbench is
   signal icache2rv_instr        : rvex_syllable_array(2**RCFG.numLanesLog2-1 downto 0);
   signal icache2rv_busFault     : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal icache2rv_affinity     : std_logic_vector(2**RCFG.numLaneGroupsLog2*RCFG.numLaneGroupsLog2-1 downto 0);
-  
+
   -- Data cache interface signals.
   signal rv2dcache_addr         : rvex_address_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal rv2dcache_readEnable   : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
@@ -80,19 +92,19 @@ architecture Behavioral of testbench is
   signal dcache2rv_readData     : rvex_data_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal dcache2rv_busFault     : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal dcache2rv_ifaceFault   : std_logic_vector(2**RCFG.numLaneGroupsLog2-1 downto 0);
-  
+
   -- Cache to arbiter interface signals.
   signal cache2arb_bus          : bus_mst2slv_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
   signal arb2cache_bus          : bus_slv2mst_array(2**RCFG.numLaneGroupsLog2-1 downto 0);
-  
+
   -- Arbited bus connected to the memory model.
   signal arb2mem_bus            : bus_mst2slv_type;
   signal mem2arb_bus            : bus_slv2mst_type;
-  
+
 --=============================================================================
 begin -- architecture
 --=============================================================================
-  
+
   -----------------------------------------------------------------------------
   -- System control
   -----------------------------------------------------------------------------
@@ -103,8 +115,8 @@ begin -- architecture
     wait for 5 ns;
     clk <= '0';
     wait for 5 ns;
-  end process; 
-  
+  end process;
+
   -- Generate reset.
   reset_proc: process is
   begin
@@ -114,11 +126,11 @@ begin -- architecture
     reset <= '0';
     wait;
   end process;
-  
+
   -- Generate clock enables.
   clkEnCPU  <= '1';
   clkEnBus  <= '1';
-  
+
   -----------------------------------------------------------------------------
   -- Instantiate the rvex core
   -----------------------------------------------------------------------------
@@ -127,7 +139,7 @@ begin -- architecture
       CFG                       => RCFG
     )
     port map (
-      
+
       -- System control.
       reset                     => reset,
       clk                       => clk,
@@ -142,7 +154,7 @@ begin -- architecture
       mem2rv_stallIn            => cache2rv_stallIn,
       rv2mem_stallOut           => rv2cache_stallOut,
       mem2rv_cacheStatus        => cache2rv_status,
-      
+
       -- Instruction memory interface.
       rv2imem_PCs               => rv2icache_PCs,
       rv2imem_fetch             => rv2icache_fetch,
@@ -150,7 +162,7 @@ begin -- architecture
       imem2rv_instr             => icache2rv_instr,
       imem2rv_affinity          => icache2rv_affinity,
       imem2rv_busFault          => icache2rv_busFault,
-      
+
       -- Data memory interface.
       rv2dmem_addr              => rv2dcache_addr,
       rv2dmem_readEnable        => rv2dcache_readEnable,
@@ -160,7 +172,7 @@ begin -- architecture
       dmem2rv_readData          => dcache2rv_readData,
       dmem2rv_ifaceFault        => dcache2rv_busFault,
       dmem2rv_busFault          => dcache2rv_ifaceFault,
-      
+
       -- Control/debug bus interface.
       dbg2rv_addr               => dbg2rv_addr,
       dbg2rv_readEnable         => dbg2rv_readEnable,
@@ -168,16 +180,16 @@ begin -- architecture
       dbg2rv_writeMask          => dbg2rv_writeMask,
       dbg2rv_writeData          => dbg2rv_writeData,
       rv2dbg_readData           => rv2dbg_readData
-      
+
     );
-  
+
   -- We're not using the debug interface.
   dbg2rv_addr         <= (others => '0');
   dbg2rv_readEnable   <= '0';
   dbg2rv_writeEnable  <= '0';
   dbg2rv_writeMask    <= (others => '1');
   dbg2rv_writeData    <= (others => '0');
-  
+
   -----------------------------------------------------------------------------
   -- Test cache integrity
   -----------------------------------------------------------------------------
@@ -216,7 +228,7 @@ begin -- architecture
         end if;
       end if;
     end process;
-    
+
     test_mem_model: process is
       variable mem      : rvmem_memoryState_type;
       variable readData : rvex_data_type;
@@ -224,21 +236,21 @@ begin -- architecture
       variable PC       : rvex_address_type;
       variable aff      : std_logic_vector(RCFG.numLaneGroupsLog2-1 downto 0);
     begin
-      
+
       -- Load the srec file into the memory.
       rvmem_clear(mem, '0');
       rvmem_loadSRec(mem, SREC_FILENAME);
-      
+
       -- Check memory results as seen by the core.
       loop
-        
+
         -- Wait for the next clock.
         wait until rising_edge(clk) and clkEnCPU = '1';
-        
+
         -- Loop over all the lane groups.
         for laneGroup in 0 to 2**RCFG.numLaneGroupsLog2-1 loop
           if rv2cache_stallOut(laneGroup) = '0' then
-            
+
             -- Check data access.
             if readEnable_r(laneGroup) = '1' then
               rvmem_read(mem, addr_r(laneGroup), readData);
@@ -259,7 +271,7 @@ begin -- architecture
               --     & " with mask " & rvs_bin(writeMask_r(laneGroup))
               --  severity note;
             end if;
-            
+
             -- Check instruction access.
             if fetch_r(laneGroup) = '1' and rv2icache_cancel(laneGroup) = '0' then
               aff := icache2rv_affinity(
@@ -285,15 +297,15 @@ begin -- architecture
                 end if;
               end loop;
             end if;
-            
+
           end if;
         end loop;
-        
+
       end loop;
-      
+
     end process;
   end block;
-  
+
   -----------------------------------------------------------------------------
   -- Generate the bypass signals
   -----------------------------------------------------------------------------
@@ -305,7 +317,7 @@ begin -- architecture
   bypass_gen: for laneGroup in 2**RCFG.numLaneGroupsLog2-1 downto 0 generate
     rv2dcache_bypass(laneGroup) <= rv2dcache_addr(laneGroup)(31);
   end generate;
-  
+
   -----------------------------------------------------------------------------
   -- Instantiate the cache
   -----------------------------------------------------------------------------
@@ -315,20 +327,20 @@ begin -- architecture
       CCFG                      => CCFG
     )
     port map (
-      
+
       -- System control.
       reset                     => reset,
       clk                       => clk,
       clkEnCPU                  => clkEnCPU,
       clkEnBus                  => clkEnBus,
-      
+
       -- Core common memory interface.
       rv2cache_decouple         => rv2cache_decouple,
       cache2rv_blockReconfig    => cache2rv_blockReconfig,
       cache2rv_stallIn          => cache2rv_stallIn,
       rv2cache_stallOut         => rv2cache_stallOut,
       cache2rv_status           => cache2rv_status,
-      
+
       -- Core instruction memory interface.
       rv2icache_PCs             => rv2icache_PCs,
       rv2icache_fetch           => rv2icache_fetch,
@@ -336,7 +348,7 @@ begin -- architecture
       icache2rv_instr           => icache2rv_instr,
       icache2rv_busFault        => icache2rv_busFault,
       icache2rv_affinity        => icache2rv_affinity,
-      
+
       -- Core data memory interface.
       rv2dcache_addr            => rv2dcache_addr,
       rv2dcache_readEnable      => rv2dcache_readEnable,
@@ -347,13 +359,13 @@ begin -- architecture
       dcache2rv_readData        => dcache2rv_readData,
       dcache2rv_busFault        => dcache2rv_busFault,
       dcache2rv_ifaceFault      => dcache2rv_ifaceFault,
-      
+
       -- Bus master interface.
       cache2bus_bus             => cache2arb_bus,
       bus2cache_bus             => arb2cache_bus
-      
+
     );
-  
+
   -----------------------------------------------------------------------------
   -- Instantiate the bus arbiter
   -----------------------------------------------------------------------------
@@ -362,20 +374,20 @@ begin -- architecture
       NUM_MASTERS               => 2**RCFG.numLaneGroupsLog2
     )
     port map (
-      
+
       -- System control.
       reset                     => reset,
       clk                       => clk,
       clkEn                     => clkEnBus,
-      
+
       -- Busses.
       mst2arb                   => cache2arb_bus,
       arb2mst                   => arb2cache_bus,
       arb2slv                   => arb2mem_bus,
       slv2arb                   => mem2arb_bus
-      
+
     );
-  
+
   -----------------------------------------------------------------------------
   -- Model the memory accessed by the cache
   -----------------------------------------------------------------------------
@@ -385,30 +397,30 @@ begin -- architecture
     variable l        : std.textio.line;
     variable c        : character;
   begin
-    
+
     -- Load the srec file into the memory.
     rvmem_clear(mem, '0');
     rvmem_loadSRec(mem, SREC_FILENAME);
-    
+
     -- Initialize the bus output.
     mem2arb_bus <= BUS_SLV2MST_IDLE;
-    
+
     -- Handle memory requests.
     loop
-      
+
       -- Wait for the next clock.
       wait until rising_edge(clk) and clkEnBus = '1';
-      
+
       -- If we have a request, delay for a random amount of cycles.
       if arb2mem_bus.readEnable = '1' or arb2mem_bus.writeEnable = '1' then
         mem2arb_bus <= BUS_SLV2MST_IDLE;
         mem2arb_bus.busy <= '1';
-        
+
         -- (TODO: this is not random)
         wait until rising_edge(clk) and clkEnBus = '1';
-        
+
       end if;
-      
+
       -- Handle the bus request.
       mem2arb_bus <= BUS_SLV2MST_IDLE;
       if arb2mem_bus.readEnable = '1' then
@@ -418,7 +430,7 @@ begin -- architecture
       elsif arb2mem_bus.writeEnable = '1' then
         rvmem_write(mem, arb2mem_bus.address, arb2mem_bus.writeData, arb2mem_bus.writeMask);
         mem2arb_bus.ack <= '1';
-        
+
         -- Handle application debug output.
         if arb2mem_bus.address = X"DEB00000" then
           c := character'val(to_integer(unsigned(arb2mem_bus.writeData(31 downto 24))));
@@ -428,9 +440,9 @@ begin -- architecture
             write(l, c);
           end if;
         end if;
-        
+
       end if;
-      
+
       -- Force a bus fault for addresses starting with 0xFF in order to test
       -- cache behavior in such a case.
       if arb2mem_bus.address(31 downto 24) = X"FF" then
@@ -439,9 +451,9 @@ begin -- architecture
       else
         mem2arb_bus.fault <= '0';
       end if;
-      
+
     end loop;
-    
+
   end process;
 
       -- Counts running cycles
@@ -460,10 +472,31 @@ begin -- architecture
     end if;
    end if;
   --Adds all cycles for each context after done executing
-  	if (rv2rctrl_idle = idleAllContexts and rv2rctrl_done /= "0000" ) then	
-  	  total_cycles(0) <= total_cycles(0) + cycle_counter(0) + cycle_counter(1) + cycle_counter(2) + cycle_counter(3);	
+  	if (rv2rctrl_idle = idleAllContexts and rv2rctrl_done /= "0000" ) then
+  	  total_cycles(0) <= total_cycles(0) + cycle_counter(0) + cycle_counter(1) + cycle_counter(2) + cycle_counter(3);
   	end if;
   end process cycle_counter_process;
+
+
+  --Counts the amount of Cache data/instruction miss in each contexts
+
+  cache_counter_process:  process(clk)
+  begin
+    if rising_edge(clk) then
+      if reset = '1' then
+        cache_counter_data <= (others => 0);
+        cache_counter_instr <= (others => 0);
+      elsif clkEnCPU = '1' then
+        for i in 0 to 2**RCFG.numContextsLog2-1 loop
+          if(cache2rv_status(i).instr_miss = '1' and rv2rctrl_done(i) = '0' and rv2rctrl_idle(i) = '0') then -- Instruction misses in the cache lane
+            cache_counter_instr(i) <= cache_counter_instr(i) + 1;
+          elsif (cache2rv_status(i).data_miss = '1' and rv2rctrl_done(i) = '0' and rv2rctrl_idle(i) = '0') then
+            cache_counter_data(i) <= cache_counter_data(i) + 1;
+          end if;
+        end loop;
+      end if;
+    end if;
+  end process cache_counter_process;
 
   -- print total cycles for code execution
   print_cycles : process(clk)
@@ -476,6 +509,13 @@ begin -- architecture
        write(l, integer'image(cycle_counter(i)));
        write(l, string'(" | "));
       end loop;
+      for i in 0 to 2**RCFG.numContextsLog2-1 loop
+        write(l, string'(" Instruction miss: "));
+        write(l, integer'image(cache_counter_instr(i)));
+        write(l, string'(" Data miss: "));
+        write(l, integer'image(cache_counter_data(i)));
+        write(l, string'(" | "));
+      end loop;
        write(l, string'("Total cycles executed in all contexts: "));
        write(l, integer'image(total_cycles(0)));
      report l.all severity FAILURE; --Failure is to stop the execution.
@@ -484,4 +524,3 @@ begin -- architecture
  end process print_cycles;
 
 end Behavioral;
-

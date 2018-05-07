@@ -6,6 +6,7 @@ add wave -noupdate /testbench/rvex_inst/clkEn
 add wave -noupdate /testbench/rvex_inst/rv2rctrl_idle
 add wave -noupdate /testbench/rvex_inst/rv2rctrl_done
 add wave -noupdate /testbench/RCFG.numContextsLog2
+add wave -position insertpoint sim:/testbench/cache_inst/*
 TreeUpdate [SetDefaultTree]
 WaveRestoreCursors {{Cursor 1} {0 ps} 0}
 quietly wave cursor active 0

@@ -27,8 +27,9 @@ architecture Behavioral of testbench is
     traceEnable                 => 1
   );
   constant CCFG                 : cache_generic_config_type := cache_cfg(
-    instrCacheLinesLog2         => 8,
-    dataCacheLinesLog2          => 8
+    instrCacheLinesLog2         => 4,
+    dataCacheLinesLog2          => 4,
+    cachePerfCountEnable	=> true
   );
   constant SREC_FILENAME        : string := "../test-progs/sim.srec";
   
