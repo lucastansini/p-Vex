@@ -45,6 +45,8 @@ architecture Behavioral of testbench is
   type   rvex_context_array       is array (natural range <>) of natural;
   signal cycle_counter          : rvex_context_array(2**RCFG.numContextsLog2-1 downto 0);
   signal total_cycles		: rvex_context_array(0 downto 0);
+  signal total_data_miss : rvex_context_array(0 downto 0);
+  signal total_instruction_miss : rvex_context_array(0 downto 0);
   -- End of signals for cycle counting
 
 
@@ -496,6 +498,10 @@ begin -- architecture
         end loop;
       end if;
     end if;
+    if (rv2rctrl_idle = idleAllContexts and rv2rctrl_done /= "0000" ) then
+  	  total_data_miss(0) <=  cache_counter_data(0) + cache_counter_data(1) + cache_counter_data(2) + cache_counter_data(3);
+      total_instruction_miss(0) <= cache_counter_instr(0) + cache_counter_instr(1) + cache_counter_instr(2) + cache_counter_instr(3);
+  	end if;
   end process cache_counter_process;
 
   -- print total cycles for code execution
@@ -516,8 +522,12 @@ begin -- architecture
         write(l, integer'image(cache_counter_data(i)));
         write(l, string'(" | "));
       end loop;
-       write(l, string'("Total cycles executed in all contexts: "));
+       write(l, string'("---Total cycles executed in all contexts: "));
        write(l, integer'image(total_cycles(0)));
+       write(l, string'("---Total Cache Data misses in all contexts: "));
+       write(l, integer'image(total_data_miss(0)));
+       write(l, string'("---Total Cache Data misses in all contexts: "));
+       write(l, integer'image(total_instruction_miss(0)));
      report l.all severity FAILURE; --Failure is to stop the execution.
     end if;
    end if;

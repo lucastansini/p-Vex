@@ -4,7 +4,7 @@
 int main() {
 
 
-	CR_CRR = 0x0022;
+	//CR_CRR = 0x8811;
 
 	/*CR_CRR = 0x0211 enables three cores.
 	  CR_CRR = 0x0011 enables two cores.
