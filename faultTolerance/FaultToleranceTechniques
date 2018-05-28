@@ -1,0 +1,3 @@
+[ECC]- Error correction code: Verify with parity.
+[DUPLICATION]- Instructions executed in parallel in other hardware unit. Then comparison can be done with either hardware or software.
+[TMR-TRIPLE MODULAR REDUNDANCY]- Similar to DMR (or duplication). This technique trumps the duplication because it has a majority voting in the end of the execution. The outcome is always the instruction with majority in those three replicated modules.

@@ -526,7 +526,7 @@ begin -- architecture
        write(l, integer'image(total_cycles(0)));
        write(l, string'("---Total Cache Data misses in all contexts: "));
        write(l, integer'image(total_data_miss(0)));
-       write(l, string'("---Total Cache Data misses in all contexts: "));
+       write(l, string'("---Total Cache Instruction misses in all contexts: "));
        write(l, integer'image(total_instruction_miss(0)));
      report l.all severity FAILURE; --Failure is to stop the execution.
     end if;

@@ -4,7 +4,7 @@
 int main() {
 
 
-	//CR_CRR = 0x8811;
+	CR_CRR = 0x9900;
 
 	/*CR_CRR = 0x0211 enables three cores.
 	  CR_CRR = 0x0011 enables two cores.
@@ -20,6 +20,6 @@ int main() {
 	  j++;
 	}
 
-	rvex_succeed("End of test.");
+	rvex_succeed("End of test.\n");
 
 }

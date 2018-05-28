@@ -1,0 +1,13 @@
+contador de cache com gráficos (ver drive) - [done]
+
+análise e execução de execuçoes em paralelo  - [done]
+	Comportamento esperado para execução em paralelo.
+
+problema na execução do ucbqsort (memoria invadida?) - [done]
+	Aparentemente, o UCBQSORT estava causando um problema por que ele requisitava um CR_CRR depois que já havia sido requisitado um inicial CR_CRR, resultando numa TRAP!
+
+problema na execução paralela (ciclos errados?) - [done]
+	O problema estava na hora de ver o TEMPO, e não os ciclos. A execução estava correta, apenas a forma de ver os dados estava errada. O tempo condiz com a execução paralela.
+
+
+
