@@ -1,0 +1,27 @@
+Arquivos:
+	fault_inj_script.do: Script que injeta as falhas e verifica o resultado.
+		Alterar: Duração da falha, tempo de execução da aplicação, nome do sinal do PC (signalPC), arquivo de memória para o dump (ver linha mem save...)
+	fault_inj_script.sh: Executa o projeto com o injetor diversas vezes
+	find_replace.sh: filtra o arquivo de sinais copiados do Modelsim
+	generate_signals_file.c: cria um arquivo com o array de sinais que serão lidos pelo injetor
+		Alterar: modificar para os arquivos necessários
+	Makefile: exemplo, executa o projeto com o injetor
+	rvex_system.vhd: exemplo de modificação do testbench para salvar arquivos com o resultado da simulação e da contagem de ciclos para verificação de simulation e data flow failures
+	signals_injfaults.do: arquivo gerado pelo generate_signals_file.c, lista de sinais que serão usados na injeção de falhas
+	signals_list_*: exemplo de sinais copiados do Modelsim, do módulo Verilog
+		
+Passos:
+	Gerar módulos Verilog
+		Opções do ISE:
+			Synthesis Options: Keep hierarchy: No
+			Right-click "Generate post-synthesis simulation model": Simulation Model Target - Verilog, marcar a opção "Include UNISIM Models in Verilog Files"
+		Double-click Generate post-synthesis simulation model
+		Arquivos .v em netgen/synthesis
+	No projeto do Modelsim: carregar arquivos VHDL, Verilog e "glbl.v" do diretório do ISE
+	Fazer dump da memória gold: "mem save -o ./$memory -f mti -data binary -addr hex /my_tb/DUT/d_mem_1"
+	Simular o projeto no Modelsim, selecionar os sinais para injeção (sinais dos módulos Verilog), adicionar para Wave, 
+		Na janela das formas de onda: expandir os sinais (1 bit por linha), selecionar tudo, copiar para um arquivo texto
+	Filtrar os arquivos com o script descrito acima (./find_replace.sh <arqTexto>)
+	Usar o(s) arquivo(s) texto filtrado no passo anterior para gerar o array com a lista de sinais (ver descrição dos arquivos acima)
+	Usar os scripts para simulação e injeção de falhas (./fault_inj_script.sh)
+	
