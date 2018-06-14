@@ -49,7 +49,7 @@ int compare(char *n1, char *n2)
 }
 int main()
 {
-	CR_CRR = 0x3210;
+
   unsigned char SortArr[1000];
   int j;
   memcpy(SortArr, gQSortNum, 1000);
